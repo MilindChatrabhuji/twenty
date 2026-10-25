@@ -6,9 +6,7 @@ import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queu
 // its full configuration is a compile error, and no queue silently relies on
 // implicit BullMQ defaults.
 //
-// priority: tier 0..3 stamped on each job at enqueue, lower runs first;
-//   with WORKER_FAIRNESS_ENABLED the jobs of a tier are ordered by tenant
-//   virtual clocks instead of FIFO
+// priority: tier 0..3 stamped on each job at enqueue, lower runs first
 // concurrency: max jobs processed in parallel per worker process
 // globalConcurrency: optional, max jobs processed in parallel across all
 //   worker processes

@@ -10,6 +10,8 @@ import { v4 } from 'uuid';
 
 import { findActiveFlatApplicationById } from 'src/engine/core-modules/application/utils/find-active-flat-application-by-id.util';
 import { buildJobStatus } from 'src/engine/core-modules/message-queue/utils/build-job-status.util';
+import { buildApplicationGroupKey } from 'src/engine/core-modules/message-queue/utils/build-application-group-key.util';
+import { buildWorkspaceGroupKey } from 'src/engine/core-modules/message-queue/utils/build-workspace-group-key.util';
 import { ENQUEUE_JOB_DEFAULT_RETRY_LIMIT } from 'src/engine/core-modules/application/application-job/constants/enqueue-job-default-retry-limit.constant';
 import { ENQUEUE_JOB_PRIORITY } from 'src/engine/core-modules/application/application-job/constants/enqueue-job-priority.constant';
 import { MAX_JOBS_PER_STATUS_READ } from 'src/engine/core-modules/application/application-job/constants/max-jobs-per-status-read.constant';
@@ -133,9 +135,9 @@ export class ApplicationJobService {
         backoff: LOGIC_FUNCTION_QUEUE_RETRY_BACKOFF,
         priority: ENQUEUE_JOB_PRIORITY,
         groupKeys: [
-          `workspace:${workspaceId}`,
+          buildWorkspaceGroupKey(workspaceId),
           ...(isDefined(application)
-            ? [`application:${application.universalIdentifier}`]
+            ? [buildApplicationGroupKey(application.universalIdentifier)]
             : []),
         ],
         ...(isDefined(input.delayMs) ? { delay: input.delayMs } : {}),

@@ -31,11 +31,11 @@ export class FairPriorityTagger {
     try {
       const client = await this.getClient(queueName);
       const keys = [
-        this.buildKey(queueName, 'epoch'),
-        this.buildKey(queueName, 'vtime'),
-        this.buildKey(queueName, 'weights'),
+        this.buildKey({ queueName, suffix: 'epoch' }),
+        this.buildKey({ queueName, suffix: 'vtime' }),
+        this.buildKey({ queueName, suffix: 'weights' }),
         ...groupKeys.map((groupKey) =>
-          this.buildKey(queueName, `clock:${groupKey}`),
+          this.buildKey({ queueName, suffix: `clock:${groupKey}` }),
         ),
       ];
 
@@ -68,7 +68,7 @@ export class FairPriorityTagger {
     const client = await this.getClient(queueName);
 
     await client.runCommand('zadd', [
-      this.buildKey(queueName, 'vtime'),
+      this.buildKey({ queueName, suffix: 'vtime' }),
       'GT',
       tag,
       VIRTUAL_TIME_MEMBER,
@@ -81,12 +81,18 @@ export class FairPriorityTagger {
     await client.runCommand('eval', [
       RESET_FAIR_EPOCH_SCRIPT,
       2,
-      this.buildKey(queueName, 'epoch'),
-      this.buildKey(queueName, 'vtime'),
+      this.buildKey({ queueName, suffix: 'epoch' }),
+      this.buildKey({ queueName, suffix: 'vtime' }),
     ]);
   }
 
-  private buildKey(queueName: MessageQueue, suffix: string): string {
+  private buildKey({
+    queueName,
+    suffix,
+  }: {
+    queueName: MessageQueue;
+    suffix: string;
+  }): string {
     return `${this.keyPrefix}:${queueName}:fair:${suffix}`;
   }
 }

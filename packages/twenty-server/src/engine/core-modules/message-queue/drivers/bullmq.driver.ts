@@ -476,26 +476,29 @@ export class BullMQDriver
       jobIndexesByGroupKeys.set(signature, jobIndexes);
     });
 
-    for (const jobIndexes of jobIndexesByGroupKeys.values()) {
-      const baseTag = await this.fairPriorityTagger.tag({
-        queueName,
-        groupKeys: groupKeysByJobIndex[jobIndexes[0]],
-        batchSize: jobIndexes.length,
-      });
-
-      if (!isDefined(baseTag)) {
-        void this.metricsService.incrementCounterForEvent({
-          key: MetricsKeys.JobFairTagFallback,
-          attributes: { queue: queueName },
-          shouldStoreInCache: false,
+    await Promise.all(
+      [...jobIndexesByGroupKeys.values()].map(async (jobIndexes) => {
+        const baseTag = await this.fairPriorityTagger.tag({
+          queueName,
+          groupKeys: groupKeysByJobIndex[jobIndexes[0]],
+          batchSize: jobIndexes.length,
         });
-        continue;
-      }
 
-      jobIndexes.forEach((jobIndex, position) => {
-        fairTags[jobIndex] = baseTag + position;
-      });
-    }
+        if (!isDefined(baseTag)) {
+          void this.metricsService.incrementCounterForEvent({
+            key: MetricsKeys.JobFairTagFallback,
+            attributes: { queue: queueName },
+            shouldStoreInCache: false,
+          });
+
+          return;
+        }
+
+        jobIndexes.forEach((jobIndex, position) => {
+          fairTags[jobIndex] = baseTag + position;
+        });
+      }),
+    );
 
     return fairTags;
   }
