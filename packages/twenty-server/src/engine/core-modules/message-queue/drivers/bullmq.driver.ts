@@ -384,16 +384,12 @@ export class BullMQDriver
         return;
       }
 
-      this.fairPriorityTagger.resetEpoch(queueName).catch((error) => {
-        this.logger.warn(
-          `Failed to reset the fairness epoch on queue ${queueName}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
+      void this.fairPriorityTagger.resetEpoch(queueName);
     });
   }
 
   private isFairnessEnabled(): boolean {
-    return this.twentyConfigService.get('WORKER_FAIRNESS_ENABLED');
+    return this.twentyConfigService.get('IS_WORKER_FAIRNESS_ENABLED');
   }
 
   private recordFairDispatch({
@@ -409,13 +405,7 @@ export class BullMQDriver
       return;
     }
 
-    this.fairPriorityTagger
-      .dispatched({ queueName, tag: fairTag })
-      .catch((error) => {
-        this.logger.warn(
-          `Failed to record the fair dispatch on queue ${queueName}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
+    void this.fairPriorityTagger.dispatched({ queueName, tag: fairTag });
   }
 
   private getTier({
@@ -423,7 +413,7 @@ export class BullMQDriver
     options,
   }: {
     queueName: MessageQueue;
-    options?: QueueJobOptions;
+    options?: Pick<QueueJobOptions, 'priority'>;
   }): number {
     return options?.priority ?? MESSAGE_QUEUE_WORKER_CONFIG[queueName].priority;
   }
@@ -455,7 +445,7 @@ export class BullMQDriver
   }: {
     queueName: MessageQueue;
     jobsData: unknown[];
-    options?: QueueJobOptions;
+    options?: Pick<QueueJobOptions, 'groupKeys'>;
   }): Promise<(number | undefined)[]> {
     const fairTags: (number | undefined)[] = jobsData.map(() => undefined);
 

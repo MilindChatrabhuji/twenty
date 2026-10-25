@@ -1602,7 +1602,7 @@ export class ConfigVariables {
     type: ConfigVariableType.BOOLEAN,
   })
   @IsOptional()
-  WORKER_FAIRNESS_ENABLED = false;
+  IS_WORKER_FAIRNESS_ENABLED = false;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.SERVER_CONFIG,

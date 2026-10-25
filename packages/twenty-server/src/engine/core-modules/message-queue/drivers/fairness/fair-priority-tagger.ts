@@ -50,9 +50,7 @@ export class FairPriorityTagger {
 
       return Number(tag);
     } catch (error) {
-      this.logger.warn(
-        `Fair tag failed on queue ${queueName}, falling back to the static priority: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      this.warn({ queueName, action: 'compute the fair tag', error });
 
       return undefined;
     }
@@ -65,25 +63,47 @@ export class FairPriorityTagger {
     queueName: MessageQueue;
     tag: number;
   }): Promise<void> {
-    const client = await this.getClient(queueName);
+    try {
+      const client = await this.getClient(queueName);
 
-    await client.runCommand('zadd', [
-      this.buildKey({ queueName, suffix: 'vtime' }),
-      'GT',
-      tag,
-      VIRTUAL_TIME_MEMBER,
-    ]);
+      await client.runCommand('zadd', [
+        this.buildKey({ queueName, suffix: 'vtime' }),
+        'GT',
+        tag,
+        VIRTUAL_TIME_MEMBER,
+      ]);
+    } catch (error) {
+      this.warn({ queueName, action: 'record the fair dispatch', error });
+    }
   }
 
   async resetEpoch(queueName: MessageQueue): Promise<void> {
-    const client = await this.getClient(queueName);
+    try {
+      const client = await this.getClient(queueName);
 
-    await client.runCommand('eval', [
-      RESET_FAIR_EPOCH_SCRIPT,
-      2,
-      this.buildKey({ queueName, suffix: 'epoch' }),
-      this.buildKey({ queueName, suffix: 'vtime' }),
-    ]);
+      await client.runCommand('eval', [
+        RESET_FAIR_EPOCH_SCRIPT,
+        2,
+        this.buildKey({ queueName, suffix: 'epoch' }),
+        this.buildKey({ queueName, suffix: 'vtime' }),
+      ]);
+    } catch (error) {
+      this.warn({ queueName, action: 'reset the fairness epoch', error });
+    }
+  }
+
+  private warn({
+    queueName,
+    action,
+    error,
+  }: {
+    queueName: MessageQueue;
+    action: string;
+    error: unknown;
+  }): void {
+    this.logger.warn(
+      `Failed to ${action} on queue ${queueName}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   private buildKey({
