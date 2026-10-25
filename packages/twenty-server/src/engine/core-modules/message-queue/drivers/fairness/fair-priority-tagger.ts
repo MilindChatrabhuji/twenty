@@ -39,7 +39,7 @@ export class FairPriorityTagger {
         ),
       ];
 
-      const tag: unknown = await client.runCommand('eval', [
+      const rawTag: unknown = await client.runCommand('eval', [
         FAIR_TAG_SCRIPT,
         keys.length,
         ...keys,
@@ -47,8 +47,15 @@ export class FairPriorityTagger {
         FAIR_CLOCK_TTL_MS,
         ...groupKeys,
       ]);
+      const tag = Number(rawTag);
 
-      return Number(tag);
+      if (!Number.isFinite(tag)) {
+        this.warn({ queueName, action: 'parse the fair tag', error: rawTag });
+
+        return undefined;
+      }
+
+      return tag;
     } catch (error) {
       this.warn({ queueName, action: 'compute the fair tag', error });
 

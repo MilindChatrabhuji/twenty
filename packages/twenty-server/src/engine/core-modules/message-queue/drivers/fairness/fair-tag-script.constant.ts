@@ -3,14 +3,11 @@ local epoch = redis.call('GET', KEYS[1]) or '0'
 local tag = tonumber(redis.call('ZSCORE', KEYS[2], 'v') or '0')
 
 for i = 4, #KEYS do
-  local raw = redis.call('GET', KEYS[i])
+  local raw = redis.call('GET', KEYS[i]) or ''
+  local clockEpoch, clock = string.match(raw, '^(%d+):(.+)$')
 
-  if raw then
-    local clockEpoch, clock = string.match(raw, '^(%d+):(.+)$')
-
-    if clockEpoch == epoch and tonumber(clock) > tag then
-      tag = tonumber(clock)
-    end
+  if clockEpoch == epoch and tonumber(clock) > tag then
+    tag = tonumber(clock)
   end
 end
 
