@@ -178,6 +178,10 @@ export class CallDatabaseEventTriggerJobsJob {
           retryLimit: 3,
           backoff: LOGIC_FUNCTION_QUEUE_RETRY_BACKOFF,
           doNotCheckDuplicatesBasedOnPrefix: true,
+          groupKeys: [
+            `workspace:${workspaceEventBatch.workspaceId}`,
+            `application:${application.universalIdentifier}`,
+          ],
         },
       );
     }

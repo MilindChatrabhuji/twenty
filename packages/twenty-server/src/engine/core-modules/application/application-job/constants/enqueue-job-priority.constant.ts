@@ -1,1 +1,1 @@
-export const ENQUEUE_JOB_PRIORITY = 10;
+export const ENQUEUE_JOB_PRIORITY = 2;

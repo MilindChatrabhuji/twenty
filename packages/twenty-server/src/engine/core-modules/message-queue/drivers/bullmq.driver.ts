@@ -38,12 +38,15 @@ import { type MessageQueueWorkerOptions } from 'src/engine/core-modules/message-
 
 import { QUEUE_JOB_CHANGED_EVENT } from 'src/engine/core-modules/message-queue/constants/queue-job-changed-event.constant';
 import { QUEUE_RETENTION } from 'src/engine/core-modules/message-queue/constants/queue-retention.constants';
+import { FairPriorityTagger } from 'src/engine/core-modules/message-queue/drivers/fairness/fair-priority-tagger';
 import { MESSAGE_QUEUE_WORKER_CONFIG } from 'src/engine/core-modules/message-queue/message-queue-worker-config.constant';
 import { type MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
 import { type QueueJobChangedEvent } from 'src/engine/core-modules/message-queue/types/queue-job-changed-event.type';
 import { getJobKey } from 'src/engine/core-modules/message-queue/utils/get-job-key.util';
 import { buildQueueJobIdWithSuffix } from 'src/engine/core-modules/message-queue/utils/build-queue-job-id-with-suffix.util';
 import { computeJobQueueWaitMs } from 'src/engine/core-modules/message-queue/utils/compute-job-queue-wait-ms.util';
+import { computeFairPriority } from 'src/engine/core-modules/message-queue/utils/compute-fair-priority.util';
+import { getDefaultGroupKeys } from 'src/engine/core-modules/message-queue/utils/get-default-group-keys.util';
 import { isQueueJobIdAlreadyWaiting } from 'src/engine/core-modules/message-queue/utils/is-queue-job-id-already-waiting.util';
 import { JOB_LATENCY_MS_BUCKET_BOUNDARIES } from 'src/engine/core-modules/metrics/constants/job-latency-ms-bucket-boundaries.constant';
 import { type MetricsService } from 'src/engine/core-modules/metrics/metrics.service';
@@ -55,6 +58,7 @@ export type BullMQDriverOptions = QueueOptions;
 
 type BullMQJobsOptions = JobsOptions & {
   broadcastTo?: QueueJobRecipient;
+  fairTag?: number;
 };
 
 export class BullMQDriver
@@ -73,13 +77,19 @@ export class BullMQDriver
     Record<MessageQueue, MessageQueueWorkerOptions>
   > = {};
   private workersDrain: Promise<void> | undefined;
+  private readonly fairPriorityTagger: FairPriorityTagger;
 
   constructor(
     private options: BullMQDriverOptions,
     private metricsService: MetricsService,
     private twentyConfigService: TwentyConfigService,
     private eventEmitter: EventEmitter2,
-  ) {}
+  ) {
+    this.fairPriorityTagger = new FairPriorityTagger(
+      (queueName) => this.queueMap[queueName].client,
+      options.prefix ?? 'bull',
+    );
+  }
 
   onModuleInit() {
     this.metricsService.createMultiObservableGauge({
@@ -277,6 +287,7 @@ export class BullMQDriver
       async (job, _token, abortSignal) =>
         Sentry.withIsolationScope(async () => {
           applyWorkspaceSentryContextFromJobData(job.data);
+          this.recordFairDispatch({ queueName, job });
 
           const queueWaitMs = computeJobQueueWaitMs({ job, now: Date.now() });
 
@@ -367,6 +378,126 @@ export class BullMQDriver
         shouldStoreInCache: false,
       });
     });
+
+    this.workerMap[queueName].on('drained', () => {
+      if (!this.isFairnessEnabled()) {
+        return;
+      }
+
+      this.fairPriorityTagger.resetEpoch(queueName).catch((error) => {
+        this.logger.warn(
+          `Failed to reset the fairness epoch on queue ${queueName}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    });
+  }
+
+  private isFairnessEnabled(): boolean {
+    return this.twentyConfigService.get('WORKER_FAIRNESS_ENABLED');
+  }
+
+  private recordFairDispatch({
+    queueName,
+    job,
+  }: {
+    queueName: MessageQueue;
+    job: Job;
+  }): void {
+    const { fairTag }: BullMQJobsOptions = job.opts;
+
+    if (!isDefined(fairTag) || !this.isFairnessEnabled()) {
+      return;
+    }
+
+    this.fairPriorityTagger
+      .dispatched({ queueName, tag: fairTag })
+      .catch((error) => {
+        this.logger.warn(
+          `Failed to record the fair dispatch on queue ${queueName}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  }
+
+  private getTier({
+    queueName,
+    options,
+  }: {
+    queueName: MessageQueue;
+    options?: QueueJobOptions;
+  }): number {
+    return options?.priority ?? MESSAGE_QUEUE_WORKER_CONFIG[queueName].priority;
+  }
+
+  private withFairPriority({
+    queueOptions,
+    tier,
+    fairTag,
+  }: {
+    queueOptions: BullMQJobsOptions;
+    tier: number;
+    fairTag: number | undefined;
+  }): BullMQJobsOptions {
+    if (!isDefined(fairTag)) {
+      return queueOptions;
+    }
+
+    return {
+      ...queueOptions,
+      priority: computeFairPriority({ tier, tag: fairTag }),
+      fairTag,
+    };
+  }
+
+  private async computeFairTags({
+    queueName,
+    jobsData,
+    options,
+  }: {
+    queueName: MessageQueue;
+    jobsData: unknown[];
+    options?: QueueJobOptions;
+  }): Promise<(number | undefined)[]> {
+    const fairTags: (number | undefined)[] = jobsData.map(() => undefined);
+
+    if (!this.isFairnessEnabled()) {
+      return fairTags;
+    }
+
+    const groupKeysByJobIndex = jobsData.map(
+      (jobData) => options?.groupKeys ?? getDefaultGroupKeys(jobData),
+    );
+    const jobIndexesByGroupKeys = new Map<string, number[]>();
+
+    groupKeysByJobIndex.forEach((groupKeys, jobIndex) => {
+      const signature = groupKeys.join('\u0000');
+      const jobIndexes = jobIndexesByGroupKeys.get(signature) ?? [];
+
+      jobIndexes.push(jobIndex);
+      jobIndexesByGroupKeys.set(signature, jobIndexes);
+    });
+
+    for (const jobIndexes of jobIndexesByGroupKeys.values()) {
+      const baseTag = await this.fairPriorityTagger.tag({
+        queueName,
+        groupKeys: groupKeysByJobIndex[jobIndexes[0]],
+        batchSize: jobIndexes.length,
+      });
+
+      if (!isDefined(baseTag)) {
+        void this.metricsService.incrementCounterForEvent({
+          key: MetricsKeys.JobFairTagFallback,
+          attributes: { queue: queueName },
+          shouldStoreInCache: false,
+        });
+        continue;
+      }
+
+      jobIndexes.forEach((jobIndex, position) => {
+        fairTags[jobIndex] = baseTag + position;
+      });
+    }
+
+    return fairTags;
   }
 
   async addCron<T>({
@@ -468,8 +599,7 @@ export class BullMQDriver
       jobId: options?.id
         ? buildQueueJobIdWithSuffix({ jobIdPrefix: options.id, suffix: v4() })
         : undefined,
-      priority:
-        options?.priority ?? MESSAGE_QUEUE_WORKER_CONFIG[queueName].priority,
+      priority: this.getTier({ queueName, options }) + 1,
       attempts: 1 + (options?.retryLimit || 0),
       backoff: options?.backoff
         ? {
@@ -515,8 +645,21 @@ export class BullMQDriver
     }
 
     const queueOptions = this.buildJobsOptions({ queueName, options });
+    const [fairTag] = await this.computeFairTags({
+      queueName,
+      jobsData: [data],
+      options,
+    });
 
-    const job = await this.queueMap[queueName].add(jobName, data, queueOptions);
+    const job = await this.queueMap[queueName].add(
+      jobName,
+      data,
+      this.withFairPriority({
+        queueOptions,
+        tier: this.getTier({ queueName, options }),
+        fairTag,
+      }),
+    );
 
     return job.id;
   }
@@ -567,13 +710,23 @@ export class BullMQDriver
     }
 
     const queueOptions = this.buildJobsOptions({ queueName, options });
+    const tier = this.getTier({ queueName, options });
+    const fairTags = await this.computeFairTags({
+      queueName,
+      jobsData: jobsToAdd.map(({ data }) => data),
+      options,
+    });
 
     const addedJobs = await this.queueMap[queueName].addBulk(
       jobsToAdd.map(({ data, jobId }, index) => ({
         name: jobName,
         data,
         opts: {
-          ...queueOptions,
+          ...this.withFairPriority({
+            queueOptions,
+            tier,
+            fairTag: fairTags[index],
+          }),
           jobId:
             jobId ??
             (queueOptions.jobId ? `${queueOptions.jobId}-${index}` : undefined),

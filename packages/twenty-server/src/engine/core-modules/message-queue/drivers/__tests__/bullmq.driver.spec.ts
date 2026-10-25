@@ -12,6 +12,7 @@ const mockAddBulk = jest.fn();
 const mockSetGlobalConcurrency = jest.fn();
 const mockRemoveGlobalConcurrency = jest.fn();
 const mockGetJobCountByTypes = jest.fn();
+const mockTwentyConfigService = { get: jest.fn().mockReturnValue(false) };
 
 jest.mock('bullmq', () => ({
   Queue: jest.fn().mockImplementation(() => ({
@@ -36,7 +37,7 @@ describe('BullMQDriver deduplication', () => {
   const driver = new BullMQDriver(
     {} as never,
     {} as never,
-    {} as never,
+    mockTwentyConfigService as never,
     {} as never,
   );
 
@@ -148,7 +149,7 @@ describe('BullMQDriver progress', () => {
   const driver = new BullMQDriver(
     {} as never,
     { recordHistogram: jest.fn() } as never,
-    {} as never,
+    mockTwentyConfigService as never,
     {} as never,
   );
 
@@ -208,7 +209,7 @@ describe('BullMQDriver job change events', () => {
   const driver = new BullMQDriver(
     {} as never,
     { recordHistogram: jest.fn() } as never,
-    {} as never,
+    mockTwentyConfigService as never,
     eventEmitter as never,
   );
 
@@ -285,7 +286,7 @@ describe('BullMQDriver queue wait metric', () => {
   const driver = new BullMQDriver(
     {} as never,
     { recordHistogram } as never,
-    {} as never,
+    mockTwentyConfigService as never,
     {} as never,
   );
 
@@ -360,7 +361,7 @@ describe('BullMQDriver queue job count gauges', () => {
   const driver = new BullMQDriver(
     {} as never,
     { createMultiObservableGauge } as never,
-    {} as never,
+    mockTwentyConfigService as never,
     {} as never,
   );
 
@@ -416,7 +417,7 @@ describe('BullMQDriver global concurrency', () => {
   const driver = new BullMQDriver(
     {} as never,
     {} as never,
-    {} as never,
+    mockTwentyConfigService as never,
     {} as never,
   );
 

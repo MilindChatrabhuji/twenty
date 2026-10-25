@@ -8,6 +8,7 @@ import {
 import { isDefined } from 'twenty-shared/utils';
 import { v4 } from 'uuid';
 
+import { findActiveFlatApplicationById } from 'src/engine/core-modules/application/utils/find-active-flat-application-by-id.util';
 import { buildJobStatus } from 'src/engine/core-modules/message-queue/utils/build-job-status.util';
 import { ENQUEUE_JOB_DEFAULT_RETRY_LIMIT } from 'src/engine/core-modules/application/application-job/constants/enqueue-job-default-retry-limit.constant';
 import { ENQUEUE_JOB_PRIORITY } from 'src/engine/core-modules/application/application-job/constants/enqueue-job-priority.constant';
@@ -87,9 +88,10 @@ export class ApplicationJobService {
 
     const jobItems = this.getJobItems(input);
 
-    const { flatLogicFunctionMaps } =
+    const { flatLogicFunctionMaps, flatApplicationMaps } =
       await this.workspaceCacheService.getOrRecompute(workspaceId, [
         'flatLogicFunctionMaps',
+        'flatApplicationMaps',
       ]);
 
     const flatLogicFunction = findFlatEntityByUniversalIdentifier({
@@ -109,6 +111,10 @@ export class ApplicationJobService {
     }
 
     const jobIds = jobItems.map((jobItem) => jobItem.jobId ?? v4());
+    const application = findActiveFlatApplicationById(
+      flatApplicationMaps,
+      applicationId,
+    );
 
     await this.messageQueueService.bulkAdd<LogicFunctionTriggerJobData>(
       LogicFunctionTriggerJob.name,
@@ -126,6 +132,12 @@ export class ApplicationJobService {
         retryLimit: input.retryLimit ?? ENQUEUE_JOB_DEFAULT_RETRY_LIMIT,
         backoff: LOGIC_FUNCTION_QUEUE_RETRY_BACKOFF,
         priority: ENQUEUE_JOB_PRIORITY,
+        groupKeys: [
+          `workspace:${workspaceId}`,
+          ...(isDefined(application)
+            ? [`application:${application.universalIdentifier}`]
+            : []),
+        ],
         ...(isDefined(input.delayMs) ? { delay: input.delayMs } : {}),
       },
     );
