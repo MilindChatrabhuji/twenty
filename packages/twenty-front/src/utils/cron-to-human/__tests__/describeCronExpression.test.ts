@@ -119,6 +119,24 @@ describe('describeCronExpression', () => {
         'at 09:30 UTC and 14:30 UTC',
       );
     });
+
+    it('should describe step or wildcard minutes with fixed or listed hours', () => {
+      expect(describeCronExpression('*/5 9 * * *')).toBe(
+        'every 5 minutes during 09:00 UTC',
+      );
+      expect(describeCronExpression('* 9 * * *')).toBe(
+        'every minute during 09:00 UTC',
+      );
+      expect(describeCronExpression('*/10 9,17 * * *')).toBe(
+        'every 10 minutes during 09:00 UTC and 17:00 UTC',
+      );
+      expect(describeCronExpression('* 9,17 * * 1-5')).toBe(
+        'every minute during 09:00 UTC and 17:00 UTC on weekdays',
+      );
+      expect(describeCronExpression('0-30 9 * * *')).toBe(
+        'between minute 0 and 30 during 09:00 UTC',
+      );
+    });
   });
 
   describe('real-world complex expressions', () => {

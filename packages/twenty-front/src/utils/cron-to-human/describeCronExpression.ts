@@ -40,21 +40,23 @@ export const describeCronExpression = (
       mergedOptions,
     );
 
-    if (parts.minutes.includes('/') && parts.hours.includes('-')) {
-      // Special case: minute intervals with hour ranges (e.g., "*/15 9-17")
+    const isMinutePattern =
+      parts.minutes.includes('/') ||
+      parts.minutes.includes('-') ||
+      parts.minutes === '*';
+
+    if (isMinutePattern && parts.hours !== '*') {
+      // Minute intervals, wildcards, or ranges with specific hours (e.g., "*/15 9-17", "*/5 9", "* 9,17")
       if (isDefined(minutesDescription) && minutesDescription !== '') {
         descriptions.push(minutesDescription);
       }
       if (isDefined(hoursDescription) && hoursDescription !== '') {
-        const cleanHoursDesc = hoursDescription.replace(/^at\s+/, '');
+        const cleanHoursDesc = parts.hours.includes('-')
+          ? hoursDescription.replace(/^at\s+/, '')
+          : hoursDescription.replace(/^at\s+/, t`during `);
         descriptions.push(cleanHoursDesc);
       }
-    } else if (
-      parts.hours === '*' &&
-      (parts.minutes.includes('/') ||
-        parts.minutes.includes('-') ||
-        parts.minutes === '*')
-    ) {
+    } else if (parts.hours === '*' && isMinutePattern) {
       // Pattern like "*/5 * * * *", "15-45 * * * *", or "* * * * *" - prioritize minutes
       if (isDefined(minutesDescription) && minutesDescription !== '') {
         descriptions.push(minutesDescription);

@@ -75,14 +75,25 @@ export const getHoursDescription = (
 
   if (isListValue(hours)) {
     const values = hours.split(',').map((v) => v.trim());
-    const formattedTimes = values.map((hour) =>
-      formatCronTime({
-        hour,
-        minute: minutes || '0',
-        use24HourFormat: use24Hour,
-        appendUTC: true,
-      }),
-    );
+    const minuteToUse = !isNaN(parseInt(minutes, 10)) ? minutes : '0';
+    const formattedTimes = values
+      .map((hour) =>
+        formatCronTime({
+          hour,
+          minute: minuteToUse,
+          use24HourFormat: use24Hour,
+          appendUTC: true,
+        }),
+      )
+      .filter((time) => time !== '');
+
+    if (formattedTimes.length === 0) {
+      return '';
+    }
+
+    if (formattedTimes.length === 1) {
+      return t`at ${formattedTimes[0]}`;
+    }
 
     if (formattedTimes.length === 2) {
       const firstTime = formattedTimes[0];
@@ -96,12 +107,16 @@ export const getHoursDescription = (
 
   const hourNum = parseInt(hours, 10);
   if (!isNaN(hourNum)) {
+    const minuteToUse = !isNaN(parseInt(minutes, 10)) ? minutes : '0';
     const formattedTime = formatCronTime({
       hour: hours,
-      minute: minutes || '0',
+      minute: minuteToUse,
       use24HourFormat: use24Hour,
       appendUTC: true,
     });
+    if (!formattedTime) {
+      return '';
+    }
     return t`at ${formattedTime}`;
   }
 
