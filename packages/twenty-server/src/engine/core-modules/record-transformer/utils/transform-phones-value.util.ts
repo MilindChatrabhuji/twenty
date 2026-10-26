@@ -87,14 +87,36 @@ const parsePhoneNumberExceptionWrapper = ({
   countryCode,
   number,
 }: AdditionalPhoneMetadataWithNumber) => {
+  if (/[a-zA-Z]/.test(number)) {
+    throw new RecordTransformerException(
+      `Provided phone number is invalid ${number}`,
+      RecordTransformerExceptionCode.INVALID_PHONE_NUMBER,
+      { userFriendlyMessage: msg`Provided phone number is invalid ${number}` },
+    );
+  }
+
   try {
-    return parsePhoneNumberWithError(number, {
+    const parsedNumber = parsePhoneNumberWithError(number, {
       defaultCallingCode: callingCode
         ? removePlusFromString(callingCode)
         : callingCode,
       defaultCountry: countryCode,
     });
-  } catch {
+
+    if (!parsedNumber.isPossible()) {
+      throw new RecordTransformerException(
+        `Provided phone number is invalid ${number}`,
+        RecordTransformerExceptionCode.INVALID_PHONE_NUMBER,
+        { userFriendlyMessage: msg`Provided phone number is invalid ${number}` },
+      );
+    }
+
+    return parsedNumber;
+  } catch (error) {
+    if (error instanceof RecordTransformerException) {
+      throw error;
+    }
+
     throw new RecordTransformerException(
       `Provided phone number is invalid ${number}`,
       RecordTransformerExceptionCode.INVALID_PHONE_NUMBER,
