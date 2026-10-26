@@ -192,7 +192,11 @@ export const EmailsFieldInput = () => {
     containerRef,
     onEscape: handleEscape,
     onClickOutside: (event) => {
-      const updatedEmails = isInputOpen ? (saveInputValue() ?? emails) : emails;
+      const updatedEmails = isInputOpen ? saveInputValue() : emails;
+
+      if (!isDefined(updatedEmails)) {
+        return;
+      }
 
       onClickOutside?.({
         newValue: parseStringArrayToEmailsValue(updatedEmails),

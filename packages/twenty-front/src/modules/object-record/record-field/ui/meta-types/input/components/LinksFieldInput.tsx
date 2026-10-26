@@ -212,7 +212,11 @@ export const LinksFieldInput = () => {
     containerRef,
     onEscape: handleEscape,
     onClickOutside: (event) => {
-      const updatedLinks = isInputOpen ? (saveInputValue() ?? links) : links;
+      const updatedLinks = isInputOpen ? saveInputValue() : links;
+
+      if (!isDefined(updatedLinks)) {
+        return;
+      }
 
       onClickOutside?.({
         newValue: parseArrayToLinksValue(updatedLinks),

@@ -189,7 +189,11 @@ export const PhonesFieldInput = () => {
     containerRef,
     onEscape: handleEscape,
     onClickOutside: (event) => {
-      const updatedPhones = isInputOpen ? (saveInputValue() ?? phones) : phones;
+      const updatedPhones = isInputOpen ? saveInputValue() : phones;
+
+      if (!isDefined(updatedPhones)) {
+        return;
+      }
 
       onClickOutside?.({
         newValue: parseArrayToPhonesValue(updatedPhones),
